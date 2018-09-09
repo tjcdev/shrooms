@@ -23,6 +23,7 @@ import time
 
 import numpy as np
 import tensorflow as tf
+import urllib
 
 def load_graph(model_file):
   graph = tf.Graph()
@@ -39,7 +40,15 @@ def read_tensor_from_image_file(file_name, input_height=299, input_width=299,
 				input_mean=0, input_std=255):
   input_name = "file_reader"
   output_name = "normalized"
-  file_reader = tf.read_file(file_name, input_name)
+
+  # Read image from URL
+  # image_url = "http://www.google.com/logo.png"
+  req = urllib.request.Request(file_name)
+  response = urllib.request.urlopen(req)
+  file_reader = response.read()
+
+  # file_reader = tf.read_file("tf_files/mushroom_photos/shiitake/pic_001.jpg", input_name)
+
   if file_name.endswith(".png"):
     image_reader = tf.image.decode_png(file_reader, channels = 3,
                                        name='png_reader')
@@ -51,6 +60,7 @@ def read_tensor_from_image_file(file_name, input_height=299, input_width=299,
   else:
     image_reader = tf.image.decode_jpeg(file_reader, channels = 3,
                                         name='jpeg_reader')
+
   float_caster = tf.cast(image_reader, tf.float32)
   dims_expander = tf.expand_dims(float_caster, 0);
   resized = tf.image.resize_bilinear(dims_expander, [input_height, input_width])
@@ -67,10 +77,46 @@ def load_labels(label_file):
     label.append(l.rstrip())
   return label
 
+def predict(file_name):
+    input_height = 224
+    input_width = 224
+    input_mean = 128
+    input_std = 128
+    input_layer = "input"
+    output_layer = "final_result"
+    label_file = "tf_files/mushroom_retrained_labels.txt"
+    model_file = "tf_files/mushroom_retrained_graph.pb"
+
+    graph = load_graph(model_file)
+    t = read_tensor_from_image_file(file_name,
+                                input_height=input_height,
+                                input_width=input_width,
+                                input_mean=input_mean,
+                                input_std=input_std)
+
+    input_name = "import/" + input_layer
+    output_name = "import/" + output_layer
+    input_operation = graph.get_operation_by_name(input_name);
+    output_operation = graph.get_operation_by_name(output_name);
+
+    with tf.Session(graph=graph) as sess:
+        start = time.time()
+        results = sess.run(output_operation.outputs[0],
+                        {input_operation.outputs[0]: t})
+        end=time.time()
+    results = np.squeeze(results)
+
+    top_k = results.argsort()[-5:][::-1]
+    labels = load_labels(label_file)
+
+    return labels[top_k[0]]
+
+
+'''
 if __name__ == "__main__":
   file_name = "tf_files/flower_photos/daisy/3475870145_685a19116d.jpg"
-  model_file = "tf_files/retrained_graph.pb"
-  label_file = "tf_files/retrained_labels.txt"
+  model_file = "tf_files/mushroom_retrained_graph.pb"
+  label_file = "tf_files/mushroom_retrained_labels.txt"
   input_height = 224
   input_width = 224
   input_mean = 128
@@ -134,4 +180,4 @@ if __name__ == "__main__":
   print('\nEvaluation time (1-image): {:.3f}s\n'.format(end-start))
   template = "{} (score={:0.5f})"
   for i in top_k:
-    print(template.format(labels[i], results[i]))
+    print(template.format(labels[i], results[i]))'''
